@@ -1,6 +1,8 @@
 Cargo.lock
 .pixi/
 pixi.lock
+uv.lock
+__pycache__
 
 artifacts/
 corpus/
