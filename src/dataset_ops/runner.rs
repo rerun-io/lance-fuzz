@@ -218,6 +218,15 @@ async fn run_inner(input: FuzzInput) -> usize {
     let mut dataset = Dataset::write(reader, &location, Some(write_params))
         .await
         .expect("create empty dataset");
+    // Every iteration must start from an empty location. Lance guarantees that today even for
+    // the fixed `memory://fuzz` URI (object-store registries are per-session and cache stores
+    // only by weak reference), but the guarantee is subtle enough to pin: leftover state would
+    // make a crash depend on prior iterations and break single-input replay.
+    assert_eq!(
+        dataset.version().version,
+        1,
+        "initial write reused existing dataset state"
+    );
 
     let mut oracle = Oracle::new();
     // Every key that has ever been in the dataset. Keys in here but not in `oracle` are
