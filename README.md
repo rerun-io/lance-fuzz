@@ -50,6 +50,14 @@ KNN validation checks result safety and cardinality — live, unique, non-null r
 index is itself exhaustive; the looseness covers rows the index does not yet include, tied
 distances, and null or non-finite vector values.
 
+Float equality is never probed — float literals do not round-trip reliably through SQL — so
+equality-family indices on float columns are exercised through null probes only. Temporal and
+decimal index probes use exact `arrow_cast` literals; Duration and Decimal128 equality is checked
+for correctness but not for index usage, because Lance does not plan those predicates as sargable.
+
+Limit/offset and take-by-offset checks compare one plan's rows against another plan's at the same
+offsets; every scan pins `scan_in_order` to keep that comparison meaningful.
+
 The schema excludes types such as `Map` that cannot be written by every initial file version, and
 storage coverage is limited to the local filesystem and the in-memory object store.
 
