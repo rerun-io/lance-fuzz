@@ -14,6 +14,11 @@ where
     F: FnOnce(&mut Scanner) -> Result<(), lance::Error>,
 {
     let mut scan = dataset.scan();
+    // The Limit and TakeOffsets oracles compare one plan's rows against another plan's at the
+    // same offsets, which is only sound if every scan streams fragments in deterministic order.
+    // That is Lance's current default; pin it so a default change cannot turn ordering drift
+    // into phantom oracle failures.
+    scan.scan_in_order(true);
     configure(&mut scan).unwrap_or_else(|e| panic!("{ctx}: scan config failed: {e}"));
     scan.try_into_stream()
         .await
