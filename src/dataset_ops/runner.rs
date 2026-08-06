@@ -142,6 +142,16 @@ async fn load_index_names(dataset: &Dataset, ctx: &str) -> Vec<String> {
     names
 }
 
+/// Whether the model holds at least one non-null value in column `col`. This is the real
+/// precondition for IVF training: KMeans errors on zero vectors, while a single non-null
+/// row trains fine (verified against Lance v11.0.0-beta.2).
+fn has_non_null_value(oracle: &Oracle, columns: &[Column], col: &str) -> bool {
+    columns
+        .iter()
+        .position(|c| c.name == col)
+        .is_some_and(|j| oracle.values().any(|row| !is_cell_null(&row[j])))
+}
+
 /// Keys for one write op: capped, deduplicated, and ordered, so the model stays key-unique.
 fn dedup_keys(keys: &[u8]) -> Vec<u64> {
     keys.iter()
@@ -632,6 +642,7 @@ async fn run_inner(input: FuzzInput) -> usize {
                 if pick > 0
                     && is_float32_vector(&columns[pick - 1])
                     && oracle.len() >= MIN_ROWS_FOR_VECTOR_INDEX
+                    && has_non_null_value(&oracle, &columns, &name)
                 {
                     choices.push(IndexKind::Vector);
                 }
@@ -810,7 +821,15 @@ async fn run_inner(input: FuzzInput) -> usize {
                     current, expected_file_version,
                     "{ctx}: current file version disagrees with oracle"
                 );
-                let target = if oracle.is_empty() {
+                // The migration overwrite discards index data, and the rebuild retrains every
+                // index — which fails for a vector index whose column has gone all-null since
+                // creation (KMeans cannot train on zero vectors). Skip the candidate in that
+                // state instead of filing the training error as a migration finding.
+                let rebuildable = indices.iter().all(|entry| {
+                    !matches!(entry.kind, IndexKind::Vector)
+                        || has_non_null_value(&oracle, &columns, &entry.col)
+                });
+                let target = if oracle.is_empty() || !rebuildable {
                     None
                 } else {
                     next_file_version(current)
@@ -995,6 +1014,22 @@ async fn run_inner(input: FuzzInput) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vector_training_precondition_tracks_non_null_values() {
+        let arr: ArrayRef = Arc::new(Int64Array::from(vec![None, Some(7)]));
+        let columns = [Column {
+            name: "v0".to_owned(),
+            spec: ColSpec::Prim(PrimSpec::Int64),
+            dt: DataType::Int64,
+        }];
+        let all_null = Oracle::from([(1, vec![(arr.clone(), 0)])]);
+        let mixed = Oracle::from([(1, vec![(arr.clone(), 0)]), (2, vec![(arr, 1)])]);
+
+        assert!(!has_non_null_value(&all_null, &columns, "v0"));
+        assert!(has_non_null_value(&mixed, &columns, "v0"));
+        assert!(!has_non_null_value(&mixed, &columns, "missing"));
+    }
 
     #[tokio::test]
     async fn ineligible_candidates_do_not_consume_the_operation_limit() {
