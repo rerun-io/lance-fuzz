@@ -271,6 +271,11 @@ fn build_index_probe(
                 null_probe(false)
             } else {
                 let needle = ngram_needle(&strs[salt % strs.len()], salt);
+                // The planner treats contains() as sargable only when the needle has at
+                // least one full trigram (NGRAM_N = 3 characters); a shorter needle makes
+                // the index answer "recheck everything" and the plan legitimately omits
+                // the index node, so the plan check must not require it.
+                let sargable = needle.chars().count() >= 3;
                 IndexProbe::Filter {
                     sql: format!("contains({col}, {})", Lit::S(needle.clone()).to_sql()),
                     expected: oracle
@@ -280,7 +285,7 @@ fn build_index_probe(
                         })
                         .map(|(k, _)| *k)
                         .collect(),
-                    indexable: true,
+                    indexable: sargable,
                 }
             }
         }
@@ -487,6 +492,47 @@ mod tests {
         assert_eq!(ngram_needle("abcdef", 0), "abcdef");
         assert_eq!(ngram_needle("abcdef", 1), "bcde");
         assert_eq!(ngram_needle("åßç∂", 1), "ßç");
+    }
+
+    #[test]
+    fn short_ngram_needles_are_not_expected_to_use_the_index() {
+        use std::sync::Arc;
+
+        use arrow::array::{ArrayRef, StringArray};
+
+        use crate::dataset_ops::ops::{ColSpec, PrimSpec};
+
+        let make = |value: &str, salt: usize| {
+            let arr: ArrayRef = Arc::new(StringArray::from(vec![value.to_owned()]));
+            let columns = [Column {
+                name: "v0".to_owned(),
+                spec: ColSpec::Prim(PrimSpec::Utf8),
+                dt: DataType::Utf8,
+            }];
+            let oracle = Oracle::from([(1, vec![(arr, 0)])]);
+            build_index_probe(&BuiltinIndexType::NGram, "v0", &columns, &oracle, salt)
+        };
+
+        // A two-character document has no full trigram: the planner will not use the index.
+        let IndexProbe::Filter { indexable, .. } = make("ab", 0) else {
+            panic!("expected a filter probe");
+        };
+        assert!(!indexable);
+
+        // A whole-value needle with three or more characters is sargable.
+        let IndexProbe::Filter { sql, indexable, .. } = make("abcdef", 0) else {
+            panic!("expected a filter probe");
+        };
+        assert_eq!(sql, "contains(v0, 'abcdef')");
+        assert!(indexable);
+
+        // An odd salt slices the middle of the value; the slice of a short string drops
+        // below the trigram size and must not be expected to plan through the index.
+        let IndexProbe::Filter { sql, indexable, .. } = make("abcd", 1) else {
+            panic!("expected a filter probe");
+        };
+        assert_eq!(sql, "contains(v0, 'bc')");
+        assert!(!indexable);
     }
 
     #[test]

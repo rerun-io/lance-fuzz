@@ -2,7 +2,6 @@
 # baseline: lance v11.0.0-beta.2, harness src/dataset_ops/ops.rs sha 42c8702d40b8
 # columns: input<TAB>bug<TAB>expected class     (the bug column is hand-maintained)
 index-index-query-idxn-labellist-on-vn-array-has-10e82f3e.bin	?	index.rs | assertion `left == right` failed: CTX: index query idxN (LabelList on vN): `array_has(vN, '\')` (scalar_index=true) disagrees with oracle left: {..}
-index-index-query-idxn-ngram-on-vn-contains-vn-95b53c0d.bin	?	index.rs | CTX: index query idxN (NGram on vN): `contains(vN, 'N')` did not use a scalar index on vN: ProjectionExec: expr=[..]
 oracle-full-scan-column-vn-disagrees-oracle-expected-st-42a08942.bin	?	oracle.rs | CTX: full scan: column vN disagrees with oracle expected: StructArray
 oracle-full-scan-column-vn-disagrees-oracle-expected-st-50c2a5cd.bin	?	oracle.rs | CTX: full scan: column vN disagrees with oracle expected: StructArray
 oracle-full-scan-column-vn-disagrees-oracle-expected-st-7010ea84.bin	?	oracle.rs | CTX: full scan: column vN disagrees with oracle expected: StructArray
