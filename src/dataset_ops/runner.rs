@@ -87,7 +87,8 @@ impl Storage {
             Ok(v) if v == "memory" => Self::Memory,
             Ok(v) if v == "tmp" => Self::Tmp,
             Ok(v) if v == "uri" => Self::Uri,
-            other => panic!("LANCE_FUZZ_STORAGE must be memory|tmp|uri, got {other:?}"),
+            Ok(v) => panic!("LANCE_FUZZ_STORAGE must be memory|tmp|uri, got {v:?}"),
+            Err(e) => panic!("LANCE_FUZZ_STORAGE must be memory|tmp|uri: {e}"),
         }
     }
 
@@ -696,6 +697,17 @@ async fn run_inner(input: FuzzInput) -> usize {
                         .drop_index(&entry.name)
                         .await
                         .unwrap_or_else(|e| panic!("{ctx}: drop_index({}): {e}", entry.name));
+                    // Compared as sequences, like the migrate rebuild check: the drop must
+                    // remove exactly the named index and leave every other one registered.
+                    let mut expected: Vec<String> =
+                        indices.iter().map(|e| e.name.clone()).collect();
+                    expected.sort_unstable();
+                    assert_eq!(
+                        load_index_names(&dataset, &ctx).await,
+                        expected,
+                        "{ctx}: drop_index({}) left the wrong index set",
+                        entry.name
+                    );
                     true
                 } else {
                     false
