@@ -1,5 +1,5 @@
 # Crash regression suite for dataset_ops. Replay it with: pixi run crash-check
-# baseline: lance v10.1.0-beta.2, harness src/dataset_ops/mod.rs sha ff2976ba26ed
+# baseline: lance v10.1.0-beta.2, harness src/dataset_ops/ops.rs sha 42c8702d40b8
 # columns: input<TAB>bug<TAB>expected class     (the bug column is hand-maintained)
 index-index-query-idxn-bloomfilter-on-id-id-scalar-6b39afa7.bin	?	index.rs | assertion `left == right` failed: CTX: index query idxN (BloomFilter on id): `id = N` (scalar_index=true) disagrees with oracle left: {..}
 index-index-query-idxn-bloomfilter-on-vn-vn-npkngz-b9153722.bin	?	index.rs | assertion `left == right` failed: CTX: index query idxN (BloomFilter on vN): `vN = 'NpKNGZ#=n'` (scalar_index=true) disagrees with oracle left: {..}

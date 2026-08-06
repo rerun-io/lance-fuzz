@@ -85,17 +85,27 @@ def content_id(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()[:8]
 
 
+def harness_source(target: str) -> Path:
+    """The harness source file that defines how stored input bytes decode.
+
+    For module targets that is `ops.rs` — it holds the `Arbitrary` input types (`FuzzInput`,
+    `Op`, `ColSpec`) and their weighting; `mod.rs` is just module declarations and would never
+    change when the layout does.
+    """
+    source = REPO / "src" / f"{target}.rs"
+    if not source.is_file():
+        source = REPO / "src" / target / "ops.rs"
+    return source
+
+
 def harness_fingerprint(target: str) -> str:
     """Fingerprint the harness source that decides how these bytes decode.
 
     Every stored input is an `arbitrary`-decoded session, so editing the input types re-interprets
     the whole suite: the inputs still run and still crash, but they no longer describe the sessions
-    that were recorded. That failure is silent, so it gets a loud warning. Hashing the whole target
-    source over-warns (any edit trips it) which is the safe direction to err in.
+    that were recorded. That failure is silent, so it gets a loud warning.
     """
-    source = REPO / "src" / f"{target}.rs"
-    if not source.is_file():
-        source = REPO / "src" / target / "mod.rs"
+    source = harness_source(target)
     if not source.is_file():
         return "unknown"
     return hashlib.sha256(source.read_bytes()).hexdigest()[:12]
@@ -147,7 +157,8 @@ def write_manifest(target: str, entries: list[Entry]) -> None:
     """Rewrite the manifest, sorted by bug then name so diffs stay readable."""
     lines = [
         f"# Crash regression suite for {target}. Replay it with: pixi run crash-check",
-        f"# baseline: lance {lance_tag()}, harness src/{target}/mod.rs sha {harness_fingerprint(target)}",
+        f"# baseline: lance {lance_tag()}, harness"
+        f" {harness_source(target).relative_to(REPO)} sha {harness_fingerprint(target)}",
         "# columns: input<TAB>bug<TAB>expected class     (the bug column is hand-maintained)",
     ]
     for entry in sorted(entries, key=lambda e: (e.bug, e.name)):
@@ -316,7 +327,8 @@ def do_check(target: str, names: list[str], retries: int, jobs: int, build: bool
     print(f"=== {target}: {len(entries)} crash inputs vs lance {lance_tag()} ===")
     if recorded and recorded != current:
         print(
-            f"\nWARNING: harness src/{target}/mod.rs changed since this suite was recorded"
+            f"\nWARNING: harness {harness_source(target).relative_to(REPO)} changed since this"
+            " suite was recorded"
             f" ({recorded} -> {current}).\n"
             "         These bytes decode through the harness input types, so a layout change"
             " silently\n"

@@ -204,5 +204,6 @@ The report shows inputs that still reproduce, no longer crash, or have a differe
 
 Crash classes are normalized across Lance versions, but serialized inputs depend on the `FuzzInput`
 layout. If the layout changes, the same bytes can decode into a different session. The manifest
-stores a hash of `src/dataset_ops/mod.rs`, and `crash-check` warns if it changes. In that case,
+stores a hash of `src/dataset_ops/ops.rs` (the file defining the input types), and `crash-check`
+warns if it changes. In that case,
 re-import inputs instead of treating widespread class changes as Lance regressions.
