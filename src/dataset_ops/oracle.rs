@@ -382,6 +382,15 @@ pub(super) async fn verify_full_scan(
     }
 }
 
+/// Up to `n` keys starting at a salt-rotated offset, so successive steps probe different keys
+/// instead of always the same corner of the key space. Consecutive offsets modulo the length
+/// stay distinct, so the picks never repeat within one call.
+fn rotated_keys(keys: &[u64], salt: usize, n: usize) -> Vec<u64> {
+    (0..n.min(keys.len()))
+        .map(|i| keys[(salt + i) % keys.len()])
+        .collect()
+}
+
 /// Filtered point probes, each run with the scalar index enabled AND disabled: with an index
 /// present these go through the scalar-index + prefilter path, which is exactly where
 /// lance#7803-class staleness shows up, and the two modes must also agree with each other.
@@ -389,22 +398,24 @@ pub(super) async fn verify_full_scan(
 /// The absent probes are drawn from `ever_inserted \ oracle` — keys that were once in the
 /// dataset and are now deleted. Those are the only keys that can carry a *stale* index entry:
 /// a key that never existed has no entry to go stale. A couple of never-seen keys keep the
-/// "no index entry at all" path exercised too.
+/// "no index entry at all" path exercised too. `salt` rotates which live and deleted keys are
+/// probed, so a session covers the key space rather than one fixed corner of it.
 pub(super) async fn verify_probes(
     dataset: &Dataset,
     oracle: &Oracle,
     columns: &[Column],
     ever_inserted: &BTreeSet<u64>,
+    salt: usize,
     when: &str,
 ) {
-    let present: Vec<u64> = oracle.keys().copied().take(2).collect();
-    let deleted: Vec<u64> = ever_inserted
+    let live: Vec<u64> = oracle.keys().copied().collect();
+    let present = rotated_keys(&live, salt, 2);
+    let gone: Vec<u64> = ever_inserted
         .iter()
         .filter(|k| !oracle.contains_key(k))
-        .rev()
         .copied()
-        .take(3)
         .collect();
+    let deleted = rotated_keys(&gone, salt, 3);
     // Never-seen keys, outside the u8 key domain so they can't collide with real data.
     let never_seen = [1_000_u64, 4_242];
 
@@ -460,6 +471,16 @@ mod tests {
         let expected: ArrayRef = Arc::new(Int64Array::from(vec![11, 20]));
 
         assert_eq!(actual.to_data(), expected.to_data());
+    }
+
+    #[test]
+    fn rotated_keys_wrap_without_repeating() {
+        let keys = [10, 20, 30];
+        assert_eq!(rotated_keys(&keys, 0, 2), vec![10, 20]);
+        assert_eq!(rotated_keys(&keys, 2, 2), vec![30, 10]);
+        assert_eq!(rotated_keys(&keys, 4, 3), vec![20, 30, 10]);
+        assert_eq!(rotated_keys(&keys[..1], 7, 3), vec![10]);
+        assert!(rotated_keys(&[], 3, 2).is_empty());
     }
 
     #[test]

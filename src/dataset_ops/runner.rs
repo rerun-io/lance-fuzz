@@ -965,7 +965,7 @@ async fn run_inner(input: FuzzInput) -> usize {
 
         let when = format!("step {step}");
         verify_full_scan(&dataset, &oracle, &columns, &when).await;
-        verify_probes(&dataset, &oracle, &columns, &ever_inserted, &when).await;
+        verify_probes(&dataset, &oracle, &columns, &ever_inserted, step, &when).await;
 
         // One rotating index per step: exercises index maintenance after mutations without
         // multiplying every operation by every live index.
@@ -1022,7 +1022,15 @@ async fn run_inner(input: FuzzInput) -> usize {
             .await
             .unwrap_or_else(|e| panic!("end: reopen of {location} failed: {e}"));
         verify_full_scan(&reopened, &oracle, &columns, "reopen").await;
-        verify_probes(&reopened, &oracle, &columns, &ever_inserted, "reopen").await;
+        verify_probes(
+            &reopened,
+            &oracle,
+            &columns,
+            &ever_inserted,
+            executed_ops,
+            "reopen",
+        )
+        .await;
     }
 
     executed_ops
