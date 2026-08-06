@@ -378,7 +378,10 @@ def do_check(target: str, names: list[str], retries: int, jobs: int, build: bool
 
     changed = len(buckets["gone"]) + len(buckets["changed"]) + len(buckets["error"])
     if changed:
-        print(f"\n{changed} input(s) behave differently — review the bug reports in bugs/")
+        print(
+            f"\n{changed} input(s) behave differently — review their bug column in"
+            f" {suite.relative_to(REPO)}/{MANIFEST_NAME}"
+        )
     return 1 if changed else 0
 
 

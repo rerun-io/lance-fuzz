@@ -170,7 +170,8 @@ the harness.
 ## Updating source code
 
 Use the same upstream Git tag for every direct `lance-*` dependency and `lance-datagen` in
-`Cargo.toml`. Then refresh and verify the dependencies:
+`Cargo.toml`. To fuzz a local Lance checkout instead, rename `.cargo/local-lance.toml` to
+`.cargo/config.toml` — see the caveats in that file. Then refresh and verify the dependencies:
 
 ```sh
 cargo update

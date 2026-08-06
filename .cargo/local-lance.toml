@@ -1,3 +1,11 @@
+# Patch table for developing against a local Lance checkout at ../lance.
+# Inert under this name: cargo only reads .cargo/config.toml, so rename it to
+# activate and rename it back before recording results.
+#
+# While active, results are not comparable with the pinned tag: coverage-report.py
+# counts only files under cargo's git checkouts (it would report no Lance lines),
+# and crash classes embed local absolute paths that triage.py does not normalize.
+
 [patch."https://github.com/lance-format/lance"]
 lance = { path = "../lance/rust/lance" }
 lance-core = { path = "../lance/rust/lance-core" }

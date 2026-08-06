@@ -315,7 +315,7 @@ fn build_index_probe(
         }
         B::Inverted => {
             // Exact-match FTS oracle for plain string columns only. List columns have no
-            // consistent expectation (bugs/013): the index build joins list elements into one
+            // consistent expectation: the index build joins list elements into one
             // space-separated document before tokenizing, while the flat-match path over
             // not-yet-indexed fragments tokenizes each element separately — under the raw
             // tokenizer the same row matches different terms depending on fragment state.

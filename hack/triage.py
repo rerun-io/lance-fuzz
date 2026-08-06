@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Shared crash-signature logic: replay an artifact, reduce its panic to a stable class.
 
-Used by both `triage-daemon.py` (is this crash new?) and `crash-check.py` (does this crash still
-happen, and is it still the *same* crash?). One definition of "same crash" for both, because the two
-answers have to agree: a class that shifts meaning between them would make the regression suite
-report phantom changes.
+Used by `crash-check.py` both when importing (which class is this artifact?) and when checking
+(does this crash still happen, and is it still the *same* crash?). One definition of "same crash"
+for both, because the two answers have to agree: a class that shifts meaning between them would
+make the regression suite report phantom changes.
 """
 
 from __future__ import annotations
