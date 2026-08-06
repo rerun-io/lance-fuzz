@@ -1,0 +1,72 @@
+# Fuzzing harness for the Lance database, run against upstream lance-format/lance.
+#
+# This is a standalone cargo workspace (see `[workspace]` below) so it does not join any parent
+# workspace — cargo-fuzz needs nightly and its own build profile.
+#
+# Every lance-* dependency is a git dependency pinned to a tag directly on
+# github.com/lance-format/lance (no crates.io + patch indirection needed).
+#
+# See README.md for how to run.
+
+[package]
+name = "lance-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+arbitrary = { version = "1", features = ["derive"] }
+
+arrow = "58"
+chrono = "0.4"
+futures = "0.3"
+rand_xoshiro = "0.7"
+tempfile = "3"
+tokio = { version = "1.23", features = ["rt", "io-util", "macros"] }
+
+# Upstream lance at the v10.1.0-beta.2 tag (github.com/lance-format/lance, formerly lancedb/lance).
+# Depending on `lance` pulls its in-repo siblings (lance-table, lance-arrow, lance-datafusion, …)
+# from the same git source automatically; the extra entries below are the ones the fuzz target
+# names directly.
+lance = { git = "https://github.com/lance-format/lance", tag = "v10.1.0-beta.2", default-features = false }
+lance-encoding = { git = "https://github.com/lance-format/lance", tag = "v10.1.0-beta.2", default-features = false }
+lance-file = { git = "https://github.com/lance-format/lance", tag = "v10.1.0-beta.2", default-features = false }
+lance-index = { git = "https://github.com/lance-format/lance", tag = "v10.1.0-beta.2", default-features = false }
+lance-linalg = { git = "https://github.com/lance-format/lance", tag = "v10.1.0-beta.2", default-features = false }
+
+# Synthetic Arrow data generator used by dataset_ops to produce values for every supported
+# column type. Same git source / tag as the rest.
+lance-datagen = { git = "https://github.com/lance-format/lance", tag = "v10.1.0-beta.2" }
+
+# The harness logic lives in this library so both the libFuzzer target (nightly + cargo-fuzz)
+# and the stable `replay` binary can drive it.
+[lib]
+name = "lance_fuzz"
+path = "src/lib.rs"
+
+# Stable, no-nightly reproducer: decodes a saved artifact with `arbitrary` and runs it once.
+# Build/run with plain cargo (dev profile keeps debug_assert! + overflow checks on):
+#   cargo run --bin replay -- <path-to-artifact>
+[[bin]]
+name = "replay"
+path = "src/bin/replay.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dataset_ops"
+path = "fuzz_targets/dataset_ops.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1
+
+[workspace]
+members = ["."]

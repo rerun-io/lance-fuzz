@@ -1,0 +1,75 @@
+[workspace]
+name = "lance-fuzz"
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+version = "0.0.0"
+
+[dependencies]
+gitpython = ">=3.1.40"
+mypy = "1.14.1.*"
+ruff = "0.11.6.*"
+
+[tasks.py-fmt]
+cmd = "ruff check --fix --config pyproject.toml . && ruff format --config pyproject.toml ."
+
+[tasks.py-fmt-check]
+cmd = "ruff check --config pyproject.toml . && ruff format --check --config pyproject.toml"
+
+[tasks.py-lint]
+cmd = "mypy --install-types --non-interactive --no-warn-unused-ignore"
+
+[tasks.fuzz-build]
+description = "Build the fuzz target"
+cmd = "cargo +nightly fuzz build --fuzz-dir . dataset_ops"
+
+[tasks.fuzz-coverage]
+description = "Build with coverage, replay the corpus, then print a per-crate report"
+cmd = "uv run hack/coverage-report.py {{ target }} --collect --min-dark {{ min_dark }}"
+args = [
+  { arg = "target", default = "dataset_ops" },
+  { arg = "min_dark", default = "400" },
+]
+
+[tasks.fuzz-coverage-report]
+description = "Re-render the coverage report from the last collected profdata (no replay)"
+cmd = "uv run hack/coverage-report.py {{ target }} --min-dark {{ min_dark }}"
+args = [
+  { arg = "target", default = "dataset_ops" },
+  { arg = "min_dark", default = "400" },
+]
+
+[tasks.crash-check]
+description = "Replay the tracked crash inputs and report fixes, regressions and changed behaviour"
+cmd = "uv run hack/crash-check.py {{ target }} --retries {{ retries }}"
+args = [
+  { arg = "target", default = "dataset_ops" },
+  { arg = "retries", default = "1" },
+]
+
+[tasks.crash-import]
+description = "Add artifacts from artifacts/<target>* into the tracked crash suite"
+cmd = "uv run hack/crash-check.py {{ target }} --import --per-class {{ per_class }}"
+args = [
+  { arg = "target", default = "dataset_ops" },
+  { arg = "per_class", default = "3" },
+]
+
+[tasks.fuzz]
+description = "Run dataset_ops across all CPU cores"
+cmd = """
+bash -c '
+  mkdir -p logs
+  cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)
+  log=logs/dataset_ops-$(date +%s).log
+
+  echo "logging to $log"
+  cargo +nightly fuzz run --fuzz-dir . dataset_ops -- \
+    -len_control=0 \
+    -max_len=4096 \
+    -fork="$cores" \
+    -ignore_crashes=1 \
+    -max_total_time={{ secs }} \
+    > "$log" 2>&1
+'
+"""
+args = [{ arg = "secs", default = "0" }]

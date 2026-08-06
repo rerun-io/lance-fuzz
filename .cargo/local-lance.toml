@@ -1,0 +1,9 @@
+[patch."https://github.com/lance-format/lance"]
+lance = { path = "../lance/rust/lance" }
+lance-core = { path = "../lance/rust/lance-core" }
+lance-datagen = { path = "../lance/rust/lance-datagen" }
+lance-encoding = { path = "../lance/rust/lance-encoding" }
+lance-file = { path = "../lance/rust/lance-file" }
+lance-index = { path = "../lance/rust/lance-index" }
+lance-io = { path = "../lance/rust/lance-io" }
+lance-linalg = { path = "../lance/rust/lance-linalg" }
