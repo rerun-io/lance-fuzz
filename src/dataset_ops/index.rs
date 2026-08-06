@@ -12,7 +12,7 @@ use lance_index::scalar::{BuiltinIndexType, FullTextSearchQuery, ScalarIndexPara
 use lance_index::IndexType;
 use lance_linalg::distance::MetricType;
 
-use super::oracle::{cell_lit, cell_str, is_cell_null, list_cells, Column, Lit, Oracle};
+use super::oracle::{cell_lit, cell_str, is_cell_null, list_cells, probe_lit, Column, Lit, Oracle};
 use super::scan::{collect_ids, collect_scan};
 
 /// Index flavors the harness generates.
@@ -230,12 +230,19 @@ fn build_index_probe(
 
     match kind {
         B::BTree | B::Bitmap | B::ZoneMap | B::BloomFilter => {
+            // `probe_lit`, not `cell_lit`: temporal and decimal columns equality-probe here
+            // (via constant-folded `arrow_cast`) even though they stay out of `lit_friendly`.
             let lits: Vec<Lit> = oracle
                 .values()
-                .filter_map(|row| cell_lit(dt, &row[j]).filter(Lit::sql_safe))
+                .filter_map(|row| probe_lit(dt, &row[j]).filter(Lit::sql_safe))
                 .collect();
             if lits.is_empty() {
                 // IsNull is sargable for all four equality-family kinds.
+                null_probe(true)
+            } else if matches!(lits[0], Lit::Cast { .. }) && !salt.is_multiple_of(2) {
+                // Temporal and decimal columns alternate with the IS NULL probe that was their
+                // only probe before equality probing existed: equality alone would drop the
+                // null-entry staleness coverage that caught real ZoneMap defects.
                 null_probe(true)
             } else {
                 let lit = lits[salt % lits.len()].clone();
@@ -243,10 +250,14 @@ fn build_index_probe(
                     sql: format!("{col} = {}", lit.to_sql()),
                     expected: oracle
                         .iter()
-                        .filter(|(_, row)| cell_lit(dt, &row[j]).as_ref() == Some(&lit))
+                        .filter(|(_, row)| probe_lit(dt, &row[j]).as_ref() == Some(&lit))
                         .map(|(k, _)| *k)
                         .collect(),
-                    indexable: true,
+                    // Duration and Decimal128 equality executes correctly but is not sargable:
+                    // lance-datafusion's safe_coerce_scalar has no source arm for those scalar
+                    // variants, so the planner leaves the predicate as a full filter and the
+                    // plan check cannot apply.
+                    indexable: !matches!(dt, DataType::Duration(_) | DataType::Decimal128(_, _)),
                 }
             }
         }
@@ -476,5 +487,113 @@ mod tests {
         assert_eq!(ngram_needle("abcdef", 0), "abcdef");
         assert_eq!(ngram_needle("abcdef", 1), "bcde");
         assert_eq!(ngram_needle("åßç∂", 1), "ßç");
+    }
+
+    #[test]
+    fn temporal_and_decimal_cells_probe_equality_via_arrow_cast() {
+        use std::sync::Arc;
+
+        use arrow::array::{ArrayRef, Decimal128Array, TimestampMicrosecondArray};
+
+        use crate::dataset_ops::ops::{ColSpec, PrimSpec};
+
+        let ts: ArrayRef = Arc::new(TimestampMicrosecondArray::from(vec![
+            Some(5),
+            None,
+            Some(5),
+        ]));
+        let dec: ArrayRef = Arc::new(
+            Decimal128Array::from(vec![Some(-12345_i128), Some(20_000_000_000), None])
+                .with_precision_and_scale(38, 10)
+                .expect("decimal scale"),
+        );
+        let columns = [
+            Column {
+                name: "v0".to_owned(),
+                spec: ColSpec::Prim(PrimSpec::TsUs),
+                dt: ts.data_type().clone(),
+            },
+            Column {
+                name: "v1".to_owned(),
+                spec: ColSpec::Prim(PrimSpec::Decimal128),
+                dt: dec.data_type().clone(),
+            },
+        ];
+        let oracle = Oracle::from([
+            (1, vec![(ts.clone(), 0), (dec.clone(), 0)]),
+            (2, vec![(ts.clone(), 1), (dec.clone(), 1)]),
+            (3, vec![(ts, 2), (dec, 2)]),
+        ]);
+
+        let IndexProbe::Filter {
+            sql,
+            expected,
+            indexable,
+        } = build_index_probe(&BuiltinIndexType::BTree, "v0", &columns, &oracle, 0)
+        else {
+            panic!("expected a filter probe for the timestamp column");
+        };
+        assert_eq!(sql, "v0 = arrow_cast(5, 'Timestamp(Microsecond, None)')");
+        assert_eq!(expected, BTreeSet::from([1, 3]));
+        assert!(indexable);
+
+        // Odd salts keep the IS NULL probe on arrow_cast types, so null-entry staleness
+        // stays covered alongside the new equality probes.
+        let IndexProbe::Filter { sql, expected, .. } =
+            build_index_probe(&BuiltinIndexType::BTree, "v0", &columns, &oracle, 1)
+        else {
+            panic!("expected a filter probe for the odd salt");
+        };
+        assert_eq!(sql, "v0 IS NULL");
+        assert_eq!(expected, BTreeSet::from([2]));
+
+        let IndexProbe::Filter { sql, expected, .. } =
+            build_index_probe(&BuiltinIndexType::ZoneMap, "v1", &columns, &oracle, 0)
+        else {
+            panic!("expected a filter probe for the decimal column");
+        };
+        assert_eq!(
+            sql,
+            "v1 = arrow_cast('-0.0000012345', 'Decimal128(38, 10)')"
+        );
+        assert_eq!(expected, BTreeSet::from([1]));
+    }
+
+    /// End-to-end: the new arrow_cast probes must be accepted by DataFusion, answered through
+    /// the scalar index (check_plan runs right after creation), and agree with the oracle on a
+    /// real dataset — for every type family `probe_lit` adds.
+    #[tokio::test]
+    async fn temporal_and_decimal_equality_probes_run_against_lance() {
+        use crate::dataset_ops::ops::{
+            ColSpec, DataParams, FuzzInput, LenClass, NullClass, Op, PrimSpec,
+        };
+        use crate::dataset_ops::runner::run;
+
+        run(FuzzInput {
+            seed: 0,
+            schema: vec![
+                ColSpec::Prim(PrimSpec::DurSec),
+                ColSpec::Prim(PrimSpec::Decimal128),
+                ColSpec::Prim(PrimSpec::TsMsUtc),
+                ColSpec::Prim(PrimSpec::Date32),
+                ColSpec::Prim(PrimSpec::Time64Ns),
+            ],
+            ops: vec![
+                Op::Append {
+                    keys: vec![1, 2, 3],
+                    data: DataParams {
+                        len: LenClass::Small,
+                        nulls: NullClass::None,
+                        nans: false,
+                    },
+                },
+                Op::CreateIndex { col: 1, kind: 0 },
+                Op::CreateIndex { col: 2, kind: 0 },
+                Op::CreateIndex { col: 3, kind: 0 },
+                Op::CreateIndex { col: 4, kind: 0 },
+                Op::CreateIndex { col: 5, kind: 0 },
+            ],
+        })
+        .await;
     }
 }

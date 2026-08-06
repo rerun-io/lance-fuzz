@@ -6,7 +6,11 @@ use std::sync::Arc;
 use arrow::array::{new_empty_array, Array, ArrayRef, AsArray as _, RecordBatch, UInt64Array};
 use arrow::compute::{cast, concat_batches, interleave, sort_to_indices, take};
 use arrow::datatypes::{
-    DataType, Field, Int16Type, Int32Type, Int64Type, Int8Type, Schema, UInt16Type, UInt32Type,
+    DataType, Date32Type, Date64Type, Decimal128Type, DurationMicrosecondType,
+    DurationMillisecondType, DurationNanosecondType, DurationSecondType, Field, Int16Type,
+    Int32Type, Int64Type, Int8Type, Schema, Time32MillisecondType, Time32SecondType,
+    Time64MicrosecondType, Time64NanosecondType, TimeUnit, TimestampMicrosecondType,
+    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType, UInt16Type, UInt32Type,
     UInt64Type, UInt8Type,
 };
 use lance::Dataset;
@@ -90,6 +94,13 @@ pub(super) enum Lit {
     U(u128),
     B(bool),
     S(String),
+    /// Exact value expressed as `arrow_cast(raw, 'cast_to')` — temporal and decimal types whose
+    /// bare literals would make DataFusion coerce the column instead (hiding it from the
+    /// scalar-index query parser) or exceed the parser-safe integer range.
+    Cast {
+        raw: String,
+        cast_to: String,
+    },
 }
 
 impl Lit {
@@ -99,6 +110,7 @@ impl Lit {
             Self::U(v) => v.to_string(),
             Self::B(v) => v.to_string(),
             Self::S(v) => format!("'{}'", v.replace('\'', "''")),
+            Self::Cast { raw, cast_to } => format!("arrow_cast({raw}, '{cast_to}')"),
         }
     }
 
@@ -109,7 +121,7 @@ impl Lit {
         match self {
             Self::I(v) => *v > i128::from(i64::MIN) && *v <= i128::from(i64::MAX),
             Self::U(v) => *v <= u128::try_from(i64::MAX).expect("positive"),
-            Self::B(_) | Self::S(_) => true,
+            Self::B(_) | Self::S(_) | Self::Cast { .. } => true,
         }
     }
 }
@@ -151,6 +163,104 @@ pub(super) fn cell_lit(dt: &DataType, cell: &Cell) -> Option<Lit> {
         DataType::LargeUtf8 => Lit::S(arr.as_string::<i64>().value(i).to_owned()),
         _ => return None,
     })
+}
+
+fn time_unit_name(unit: &TimeUnit) -> &'static str {
+    match unit {
+        TimeUnit::Second => "Second",
+        TimeUnit::Millisecond => "Millisecond",
+        TimeUnit::Microsecond => "Microsecond",
+        TimeUnit::Nanosecond => "Nanosecond",
+    }
+}
+
+/// Exact SQL string literal for a raw scaled decimal, e.g. -12345 at scale 10 → '-0.0000012345'.
+fn decimal_sql_string(raw: i128, scale: i8) -> Option<String> {
+    let scale = u32::try_from(scale).ok()?;
+    let mag = raw.unsigned_abs();
+    let sign = if raw < 0 { "-" } else { "" };
+    if scale == 0 {
+        return Some(format!("'{sign}{mag}'"));
+    }
+    let base = 10_u128.checked_pow(scale)?;
+    Some(format!(
+        "'{sign}{}.{:0width$}'",
+        mag / base,
+        mag % base,
+        width = scale as usize
+    ))
+}
+
+/// Literal for index probes. Extends [`cell_lit`] with temporal and decimal values through
+/// [`Lit::Cast`]; the wider set stays out of `lit_friendly` so update and read predicates keep
+/// their behavior on existing inputs. Float and Decimal256 cells still yield `None`: float
+/// literals do not reliably round-trip through SQL, and Decimal256 has no indexable kind.
+pub(super) fn probe_lit(dt: &DataType, cell: &Cell) -> Option<Lit> {
+    if let Some(lit) = cell_lit(dt, cell) {
+        return Some(lit);
+    }
+    if is_cell_null(cell) {
+        return None;
+    }
+    let (arr, i) = cell;
+    let i = *i;
+    let (raw, cast_to) = match dt {
+        DataType::Date32 => (
+            arr.as_primitive::<Date32Type>().value(i).to_string(),
+            "Date32".to_owned(),
+        ),
+        DataType::Date64 => (
+            arr.as_primitive::<Date64Type>().value(i).to_string(),
+            "Date64".to_owned(),
+        ),
+        DataType::Time32(unit) => {
+            let v = match unit {
+                TimeUnit::Second => arr.as_primitive::<Time32SecondType>().value(i),
+                TimeUnit::Millisecond => arr.as_primitive::<Time32MillisecondType>().value(i),
+                _ => return None, // invalid Time32 unit
+            };
+            (v.to_string(), format!("Time32({})", time_unit_name(unit)))
+        }
+        DataType::Time64(unit) => {
+            let v = match unit {
+                TimeUnit::Microsecond => arr.as_primitive::<Time64MicrosecondType>().value(i),
+                TimeUnit::Nanosecond => arr.as_primitive::<Time64NanosecondType>().value(i),
+                _ => return None, // invalid Time64 unit
+            };
+            (v.to_string(), format!("Time64({})", time_unit_name(unit)))
+        }
+        DataType::Timestamp(unit, tz) => {
+            let v = match unit {
+                TimeUnit::Second => arr.as_primitive::<TimestampSecondType>().value(i),
+                TimeUnit::Millisecond => arr.as_primitive::<TimestampMillisecondType>().value(i),
+                TimeUnit::Microsecond => arr.as_primitive::<TimestampMicrosecondType>().value(i),
+                TimeUnit::Nanosecond => arr.as_primitive::<TimestampNanosecondType>().value(i),
+            };
+            let tz = match tz {
+                None => "None".to_owned(),
+                Some(tz) => format!("Some(\"{tz}\")"),
+            };
+            (
+                v.to_string(),
+                format!("Timestamp({}, {tz})", time_unit_name(unit)),
+            )
+        }
+        DataType::Duration(unit) => {
+            let v = match unit {
+                TimeUnit::Second => arr.as_primitive::<DurationSecondType>().value(i),
+                TimeUnit::Millisecond => arr.as_primitive::<DurationMillisecondType>().value(i),
+                TimeUnit::Microsecond => arr.as_primitive::<DurationMicrosecondType>().value(i),
+                TimeUnit::Nanosecond => arr.as_primitive::<DurationNanosecondType>().value(i),
+            };
+            (v.to_string(), format!("Duration({})", time_unit_name(unit)))
+        }
+        DataType::Decimal128(precision, scale) => (
+            decimal_sql_string(arr.as_primitive::<Decimal128Type>().value(i), *scale)?,
+            format!("Decimal128({precision}, {scale})"),
+        ),
+        _ => return None,
+    };
+    Some(Lit::Cast { raw, cast_to })
 }
 
 /// Non-null string value of a Utf8/LargeUtf8 cell.
