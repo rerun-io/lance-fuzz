@@ -739,10 +739,21 @@ async fn run_inner(input: FuzzInput) -> usize {
                             let dt = make_generator(spec, LenClass::Small, 0.0)
                                 .data_type()
                                 .clone();
+                            // Sparse sessions keep requesting the sparse layout for columns
+                            // added later, or the coverage would silently decay to dense as
+                            // the schema evolves. Always safe here: sparse implies the session
+                            // is pinned to file version 2.3 (no migration past it, no restore
+                            // before it), and eligibility is re-checked per field.
+                            let field = Field::new(&name, dt.clone(), true);
+                            let field = if sparse {
+                                with_sparse_request(field)
+                            } else {
+                                field
+                            };
                             dataset
                                 .add_columns(
                                     NewColumnTransform::AllNulls(Arc::new(Schema::new(vec![
-                                        Field::new(&name, dt.clone(), true),
+                                        field,
                                     ]))),
                                     None,
                                     None,
@@ -760,6 +771,8 @@ async fn run_inner(input: FuzzInput) -> usize {
                             });
                         }
                         AddFill::IdDerived => {
+                            // Stays dense even in sparse sessions: SqlExpressions carries no
+                            // field metadata, so there is nowhere to attach the request.
                             // NULLIF keeps the inferred column nullable; a plain expression over
                             // `id` would be non-null and later null writes would be rejected.
                             dataset
@@ -1051,6 +1064,44 @@ mod tests {
         .await;
 
         assert_eq!(executed, 1);
+    }
+
+    #[tokio::test]
+    async fn sparse_sessions_apply_the_request_to_added_columns() {
+        // Seed bits 24-25 select file version 2.3, bits 20-21 request sparse encoding, so the
+        // added column is marked sparse and the writes after it run through the sparse layout.
+        let seed = (3 << 24) | (1 << 20);
+        let data = DataParams {
+            len: LenClass::Small,
+            nulls: NullClass::Some,
+            nans: false,
+        };
+
+        let executed = run_inner(FuzzInput {
+            seed,
+            schema: vec![ColSpec::Prim(PrimSpec::Int64)],
+            ops: vec![
+                Op::Append {
+                    keys: vec![1, 2, 3],
+                    data,
+                },
+                Op::AddColumn {
+                    fill: AddFill::Nulls(ColSpec::Prim(PrimSpec::Utf8)),
+                },
+                Op::Append {
+                    keys: vec![4, 5],
+                    data,
+                },
+                Op::Compact {
+                    sel: 0,
+                    materialize: true,
+                    defer_remap: false,
+                },
+            ],
+        })
+        .await;
+
+        assert_eq!(executed, 4);
     }
 
     #[tokio::test]
