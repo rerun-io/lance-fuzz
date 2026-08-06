@@ -935,6 +935,16 @@ async fn run_inner(input: FuzzInput) -> usize {
                         .checkout_version(target.version)
                         .await
                         .unwrap_or_else(|e| panic!("{ctx}: checkout_version failed: {e}"));
+                    // The checked-out version must already read exactly as its snapshot did —
+                    // the session's only read-only time-travel check, reported before the
+                    // restore so a historical-read defect is not filed as a restore one.
+                    verify_full_scan(
+                        &old,
+                        &target.oracle,
+                        &target.columns,
+                        &format!("{ctx}: checkout"),
+                    )
+                    .await;
                     old.restore()
                         .await
                         .unwrap_or_else(|e| panic!("{ctx}: restore failed: {e}"));
@@ -1097,6 +1107,41 @@ mod tests {
         .await;
 
         assert_eq!(executed, 1);
+    }
+
+    #[tokio::test]
+    async fn restore_rolls_back_the_model_with_the_dataset() {
+        let data = DataParams {
+            len: LenClass::Small,
+            nulls: NullClass::None,
+            nans: false,
+        };
+
+        // Snapshots: [initial, after Append(1), after Append(2)]; sel 1 restores to {1}.
+        // The final Append(2) only executes if the rollback freed key 2 in the model, so the
+        // executed count proves the oracle rolled back with the dataset.
+        let executed = run_inner(FuzzInput {
+            seed: 0,
+            schema: vec![ColSpec::Prim(PrimSpec::Int64)],
+            ops: vec![
+                Op::Append {
+                    keys: vec![1],
+                    data,
+                },
+                Op::Append {
+                    keys: vec![2],
+                    data,
+                },
+                Op::Restore { sel: 1 },
+                Op::Append {
+                    keys: vec![2],
+                    data,
+                },
+            ],
+        })
+        .await;
+
+        assert_eq!(executed, 4);
     }
 
     #[tokio::test]
