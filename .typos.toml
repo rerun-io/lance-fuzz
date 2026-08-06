@@ -1,0 +1,10 @@
+# https://github.com/crate-ci/typos
+# install:  cargo install typos-cli
+# run:      typos
+
+[default.extend-words]
+teh = "teh"     # part of @teh-cmc
+lits = "lits"
+
+[files]
+extend-exclude = ["crashes/"]

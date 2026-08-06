@@ -1,0 +1,9 @@
+Cargo.lock
+.pixi/
+pixi.lock
+
+artifacts/
+corpus/
+coverage/
+logs/
+target/

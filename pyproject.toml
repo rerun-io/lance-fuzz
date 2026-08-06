@@ -1,0 +1,42 @@
+# Adapted from https://github.com/rerun-io/rerun_template
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+preview = true
+unsafe-fixes = true
+extend-exclude = ["artifacts", "corpus", "coverage", "crashes", "target"]
+
+[tool.ruff.lint]
+explicit-preview-rules = true
+select = [
+    "D",
+    "E",
+    "F",
+    "I",
+    "TID",
+    "W",
+    "UP",
+    "PLW1514",
+]
+ignore = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D202",
+    "D107",
+    "D203",
+    "D212",
+    "D213",
+    "D401",
+    "D402",
+    "D415",
+    "D416",
+    "E501",
+    "TID252",
+]
+unfixable = ["PLW1514"]
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]

@@ -1,0 +1,57 @@
+# Adapted from https://github.com/rerun-io/rerun_template
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  rust-check:
+    name: Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rust-docs, clippy, rustfmt
+          toolchain: 1.95.0
+          override: true
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install --yes protobuf-compiler
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
+
+      - name: Check
+        run: cargo check --all-targets
+
+      - name: Documentation
+        run: cargo doc --lib --no-deps --document-private-items
+
+      - name: Tests
+        run: cargo nextest run --lib
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+  cargo-deny:
+    name: Rust dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          rust-version: "1.95.0"
+          log-level: warn
+          command: check
