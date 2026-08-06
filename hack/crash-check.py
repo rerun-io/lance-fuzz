@@ -35,6 +35,7 @@ from pathlib import Path
 
 from triage import (
     ARTIFACT_PREFIXES,
+    FAILED_TO_START,
     NO_PANIC,
     REPO,
     TIMED_OUT,
@@ -230,7 +231,7 @@ def do_import(target: str, dirs: list[Path], per_class: int, jobs: int, picked: 
     grouped: dict[str, list[Path]] = {}
     for artifact in candidates:
         cls = cache[artifact.name]
-        if cls.endswith(NO_PANIC) or cls.endswith(TIMED_OUT):
+        if cls.endswith(NO_PANIC) or cls.endswith(TIMED_OUT) or FAILED_TO_START in cls:
             continue
         grouped.setdefault(cls, []).append(artifact)
 
@@ -279,7 +280,7 @@ class Result:
             return "same"
         if self.cls.endswith(NO_PANIC):
             return "gone"
-        if self.cls.endswith(TIMED_OUT):
+        if self.cls.endswith(TIMED_OUT) or FAILED_TO_START in self.cls:
             return "error"
         return "changed"
 

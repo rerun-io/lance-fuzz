@@ -19,9 +19,11 @@ REPO = Path(__file__).resolve().parent.parent
 ARTIFACT_PREFIXES = ("crash-", "oom-", "timeout-")
 
 # Sentinels returned by panic_block() in place of a panic. Callers distinguish them from a real
-# panic, so they are values rather than exceptions.
+# panic, so they are values rather than exceptions. FAILED_TO_START is a prefix (the OS error
+# follows it), the other two are complete values.
 NO_PANIC = "NO PANIC REPRODUCED"
 TIMED_OUT = "REPLAY TIMED OUT"
+FAILED_TO_START = "REPLAY FAILED TO START"
 
 # --- signature normalisation -------------------------------------------------------------------
 #
@@ -122,7 +124,7 @@ def panic_block(replay: Path, artifact: Path, target: str = "dataset_ops") -> st
     except subprocess.TimeoutExpired:
         return TIMED_OUT
     except OSError as exc:
-        return f"REPLAY FAILED TO START: {exc}"
+        return f"{FAILED_TO_START}: {exc}"
 
     output = (completed.stdout + completed.stderr).splitlines()
     for i, line in enumerate(output):
