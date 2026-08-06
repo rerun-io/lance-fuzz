@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 use arrow::array::{AsArray as _, RecordBatch};
 use arrow::datatypes::UInt64Type;
 use futures::TryStreamExt as _;
-use lance::dataset::scanner::Scanner;
 use lance::Dataset;
+use lance::dataset::scanner::Scanner;
 
 /// Run a scan configured by `configure`, panicking with `ctx` at whichever stage fails.
 pub(super) async fn collect_scan<F>(dataset: &Dataset, configure: F, ctx: &str) -> Vec<RecordBatch>

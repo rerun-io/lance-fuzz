@@ -4,15 +4,15 @@ use std::collections::BTreeSet;
 
 use arrow::array::AsArray as _;
 use arrow::datatypes::{DataType, UInt64Type};
-use lance::index::vector::VectorIndexParams;
-use lance::index::DatasetIndexExt as _;
 use lance::Dataset;
+use lance::index::DatasetIndexExt as _;
+use lance::index::vector::VectorIndexParams;
+use lance_index::IndexType;
 use lance_index::scalar::inverted::tokenizer::InvertedIndexParams;
 use lance_index::scalar::{BuiltinIndexType, FullTextSearchQuery, ScalarIndexParams};
-use lance_index::IndexType;
 use lance_linalg::distance::MetricType;
 
-use super::oracle::{cell_lit, cell_str, is_cell_null, list_cells, probe_lit, Column, Lit, Oracle};
+use super::oracle::{Column, Lit, Oracle, cell_lit, cell_str, is_cell_null, list_cells, probe_lit};
 use super::scan::{collect_ids, collect_scan};
 
 /// Index flavors the harness generates.

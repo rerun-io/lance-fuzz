@@ -8,25 +8,25 @@ use arrow::array::{
 };
 use arrow::compute::cast;
 use arrow::datatypes::{DataType, Field, Schema};
+use lance::Dataset;
 use lance::dataset::optimize::compact_files;
 use lance::dataset::{
     NewColumnTransform, UpdateBuilder, WhenMatched, WhenNotMatched, WhenNotMatchedBySource,
     WriteMode,
 };
 use lance::index::DatasetIndexExt as _;
-use lance::Dataset;
 use lance_file::version::LanceFileVersion;
 use lance_index::optimize::OptimizeOptions;
-use rand_xoshiro::rand_core::SeedableRng as _;
 use rand_xoshiro::Xoshiro256PlusPlus;
+use rand_xoshiro::rand_core::SeedableRng as _;
 
 use super::compact::CompactionProfile;
 use super::data::{
-    all_null_cell, build_write, full_row, make_generator, merge, source_reader, WriteProfile,
+    WriteProfile, all_null_cell, build_write, full_row, make_generator, merge, source_reader,
 };
 use super::index::{
-    create_index, rebuild_indices, scalar_index_kinds, verify_index_query, IndexEntry, IndexKind,
-    IndexQueryCheck,
+    IndexEntry, IndexKind, IndexQueryCheck, create_index, rebuild_indices, scalar_index_kinds,
+    verify_index_query,
 };
 use super::migrate::{
     assert_data_file_versions, dataset_file_version, file_version_from_seed, migrate_dataset,
@@ -34,8 +34,8 @@ use super::migrate::{
 };
 use super::ops::{AddFill, ColSpec, DataParams, FuzzInput, LenClass, NullClass, Op, PrimSpec};
 use super::oracle::{
-    is_cell_null, is_float32_vector, lit_friendly, verify_full_scan, verify_probes, Column, Lit,
-    Oracle,
+    Column, Lit, Oracle, is_cell_null, is_float32_vector, lit_friendly, verify_full_scan,
+    verify_probes,
 };
 use super::read::execute_read;
 

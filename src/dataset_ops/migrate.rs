@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field};
-use lance::dataset::WriteMode;
 use lance::Dataset;
+use lance::dataset::WriteMode;
 use lance_encoding::constants::{STRUCTURAL_ENCODING_META_KEY, STRUCTURAL_ENCODING_SPARSE};
 use lance_file::version::{ConcreteFileVersion, LanceFileVersion};
 
-use super::data::{source_reader, WriteProfile};
+use super::data::{WriteProfile, source_reader};
 
 /// Initial file version for one input. Bits 24-25 are read by nothing else per input.
 pub(super) fn file_version_from_seed(seed: u64) -> LanceFileVersion {
@@ -170,16 +170,16 @@ pub(super) async fn migrate_dataset(
 mod tests {
     use std::sync::Arc;
 
-    use arrow::array::{new_null_array, ArrayRef, RecordBatch, UInt64Array};
+    use arrow::array::{ArrayRef, RecordBatch, UInt64Array, new_null_array};
     use arrow::datatypes::{Field, Schema, TimeUnit};
     use lance::index::DatasetIndexExt as _;
     use lance_index::scalar::BuiltinIndexType;
-    use rand_xoshiro::rand_core::{RngCore as _, SeedableRng as _};
     use rand_xoshiro::Xoshiro256PlusPlus;
+    use rand_xoshiro::rand_core::{RngCore as _, SeedableRng as _};
 
     use super::*;
-    use crate::dataset_ops::data::{make_generator, WriteProfile};
-    use crate::dataset_ops::index::{create_index, rebuild_indices, IndexEntry, IndexKind};
+    use crate::dataset_ops::data::{WriteProfile, make_generator};
+    use crate::dataset_ops::index::{IndexEntry, IndexKind, create_index, rebuild_indices};
     use crate::dataset_ops::ops::{ColSpec, FslChild, FuzzInput, LenClass, Op, PrimSpec};
     use crate::dataset_ops::runner::run;
 
@@ -343,11 +343,13 @@ mod tests {
             assert_data_file_versions(&dataset, target, "test migration");
 
             // The overwrite must discard the old index data; only then does the rebuild restore it.
-            assert!(dataset
-                .load_indices()
-                .await
-                .expect("load indices")
-                .is_empty());
+            assert!(
+                dataset
+                    .load_indices()
+                    .await
+                    .expect("load indices")
+                    .is_empty()
+            );
             rebuild_indices(&mut dataset, &indices, "test migration").await;
             let rebuilt = dataset.load_indices().await.expect("load rebuilt indices");
             assert_eq!(rebuilt.len(), 1);

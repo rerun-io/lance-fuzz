@@ -124,8 +124,8 @@ impl CompactionProfile {
 
 #[cfg(test)]
 mod tests {
-    use rand_xoshiro::rand_core::{RngCore as _, SeedableRng as _};
     use rand_xoshiro::Xoshiro256PlusPlus;
+    use rand_xoshiro::rand_core::{RngCore as _, SeedableRng as _};
 
     use super::*;
 
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn knob_selection_is_jointly_reachable_with_the_write_profile() {
         use std::collections::{BTreeMap, BTreeSet, HashSet};
-        use std::mem::{discriminant, Discriminant};
+        use std::mem::{Discriminant, discriminant};
 
         use crate::dataset_ops::data::WriteProfile;
 

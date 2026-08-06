@@ -3,20 +3,20 @@
 use std::sync::Arc;
 
 use arrow::array::{
-    new_empty_array, new_null_array, Array, ArrayRef, RecordBatch, RecordBatchIterator,
-    StructArray, UInt64Array,
+    Array, ArrayRef, RecordBatch, RecordBatchIterator, StructArray, UInt64Array, new_empty_array,
+    new_null_array,
 };
 use arrow::compute::cast;
 use arrow::datatypes::{DataType, Field, Fields, Schema, TimeUnit};
 use arrow::error::ArrowError;
+use lance::Dataset;
 use lance::dataset::write::merge_insert::SourceDedupeBehavior;
 use lance::dataset::{
     MergeInsertBuilder, MergeStats, WhenMatched, WhenNotMatched, WhenNotMatchedBySource,
     WriteParams,
 };
-use lance::Dataset;
 use lance_datagen::{
-    array, ArrayGenerator, ArrayGeneratorExt as _, ByteCount, Dimension, RowCount,
+    ArrayGenerator, ArrayGeneratorExt as _, ByteCount, Dimension, RowCount, array,
 };
 use rand_xoshiro::Xoshiro256PlusPlus;
 

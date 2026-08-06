@@ -5,15 +5,15 @@ use std::collections::BTreeSet;
 use arrow::array::{AsArray as _, UInt32Array};
 use arrow::compute::take;
 use arrow::datatypes::{DataType, UInt64Type};
-use lance::dataset::ProjectionRequest;
 use lance::Dataset;
-use lance_datagen::{array, RowCount};
+use lance::dataset::ProjectionRequest;
+use lance_datagen::{RowCount, array};
 use rand_xoshiro::Xoshiro256PlusPlus;
 
 use super::ops::{PredSpec, ReadOp};
 use super::oracle::{
-    all_names, assert_arrays_eq, cell_lit, concat_or_empty, is_cell_null, is_float_vector,
-    lit_friendly, Column, Lit, Oracle,
+    Column, Lit, Oracle, all_names, assert_arrays_eq, cell_lit, concat_or_empty, is_cell_null,
+    is_float_vector, lit_friendly,
 };
 use super::scan::{collect_ids, collect_scan};
 

@@ -3,15 +3,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use arrow::array::{new_empty_array, Array, ArrayRef, AsArray as _, RecordBatch, UInt64Array};
+use arrow::array::{Array, ArrayRef, AsArray as _, RecordBatch, UInt64Array, new_empty_array};
 use arrow::compute::{cast, concat_batches, interleave, sort_to_indices, take};
 use arrow::datatypes::{
     DataType, Date32Type, Date64Type, Decimal128Type, DurationMicrosecondType,
-    DurationMillisecondType, DurationNanosecondType, DurationSecondType, Field, Int16Type,
-    Int32Type, Int64Type, Int8Type, Schema, Time32MillisecondType, Time32SecondType,
+    DurationMillisecondType, DurationNanosecondType, DurationSecondType, Field, Int8Type,
+    Int16Type, Int32Type, Int64Type, Schema, Time32MillisecondType, Time32SecondType,
     Time64MicrosecondType, Time64NanosecondType, TimeUnit, TimestampMicrosecondType,
-    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType, UInt16Type, UInt32Type,
-    UInt64Type, UInt8Type,
+    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType, UInt8Type, UInt16Type,
+    UInt32Type, UInt64Type,
 };
 use lance::Dataset;
 
