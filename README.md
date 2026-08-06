@@ -46,8 +46,9 @@ Float32 fixed-size lists can use an IVF_FLAT vector index.
 The model checks logical dataset contents; it does not independently recompute generated values.
 
 KNN validation checks result safety and cardinality — live, unique, non-null rows, and at most
-`min(k, live_non_null_rows)` of them — not exact nearest-neighbor order, because IVF searches are
-approximate and an existing index may not cover later writes.
+`min(k, live_non_null_rows)` of them — not the exact neighbor set. The single-partition IVF_FLAT
+index is itself exhaustive; the looseness covers rows the index does not yet include, tied
+distances, and null or non-finite vector values.
 
 The schema excludes types such as `Map` that cannot be written by every initial file version, and
 storage coverage is limited to the local filesystem and the in-memory object store.

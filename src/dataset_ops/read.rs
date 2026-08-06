@@ -175,16 +175,16 @@ pub(super) async fn execute_read(
 
         // TODO: strengthen the KNN oracle with a flat reference search. The checks below are
         // sound but weak: they verify result safety (live, unique, non-null) and an upper
-        // cardinality bound, so an empty result passes even when matching rows exist. A stronger
-        // oracle must:
-        // - compute a flat (exact) reference search over the row model as the expectation;
-        // - account for null and non-finite (NaN/inf) vector values in that reference;
-        // - handle tied distances, where any of the tied rows is a correct answer;
-        // - compare indexed recall only over the dataset fragments the index actually covers,
-        //   since an index built before later inserts/deletes does not index those rows.
-        // Do NOT replace this with an exact-order (or exact-set) comparison against a flat
-        // search: IVF probed with nprobes=1 is approximate, so that oracle is unsound and
-        // reports false positives.
+        // cardinality bound, so an empty result passes even when matching rows exist. The
+        // looseness is NOT because "IVF is approximate" in general — the only vector index the
+        // harness builds is IVF_FLAT with a single partition, so an nprobes=1 probe scans every
+        // indexed row. A stronger oracle must instead model what actually makes results diverge:
+        // - rows written after the index was built are served by a separate flat-search path
+        //   and merged with the indexed results;
+        // - tied distances, where any of the tied rows is a correct answer;
+        // - null and non-finite (NaN/inf) vector values, whose distance semantics are
+        //   engine-specific;
+        // and only then compare against a flat (exact) reference over the row model.
         ReadOp::Knn { col, k } => {
             let vectors: Vec<usize> = (0..columns.len())
                 .filter(|j| is_float_vector(&columns[*j]))
@@ -230,10 +230,9 @@ pub(super) async fn execute_read(
                     }
                 }
                 // Upper bound only: a knn search may return *fewer* than min(k, live) rows and
-                // still be correct — an IVF index probed with nprobes=1 is approximate, and an
-                // index built before later inserts/deletes covers only the rows it indexed. The
-                // per-row checks above (unique, live, non-null) catch the real defects; requiring
-                // an exact count here is a false positive.
+                // still be correct — see the TODO above for what an exact expectation would
+                // have to model. The per-row checks above (unique, live, non-null) catch the
+                // real defects; requiring an exact count here is a false positive.
                 assert!(
                     seen.len() <= k.min(live_non_null),
                     "{ctx}: knn returned {} rows, more than min(k={k}, live={live_non_null})",
