@@ -703,13 +703,17 @@ async fn run_inner(input: FuzzInput) -> usize {
             }
 
             Op::OptimizeIndices { sel } => {
-                let mut options = OptimizeOptions::default();
-                options.num_indices_to_merge = [None, Some(1), Some(2)][(*sel as usize) % 3];
-                dataset
-                    .optimize_indices(&options)
-                    .await
-                    .unwrap_or_else(|e| panic!("{ctx}: optimize_indices failed: {e}"));
-                true
+                if !indices.is_empty() {
+                    let mut options = OptimizeOptions::default();
+                    options.num_indices_to_merge = [None, Some(1), Some(2)][(*sel as usize) % 3];
+                    dataset
+                        .optimize_indices(&options)
+                        .await
+                        .unwrap_or_else(|e| panic!("{ctx}: optimize_indices failed: {e}"));
+                    true
+                } else {
+                    false
+                }
             }
 
             Op::Compact {
@@ -1046,7 +1050,16 @@ mod tests {
 
     #[tokio::test]
     async fn ineligible_candidates_do_not_consume_the_operation_limit() {
-        let mut ops = vec![Op::DropIndex { sel: 0 }; MAX_OPS];
+        // Without indices, both index maintenance ops must be skipped without consuming budget.
+        let mut ops: Vec<Op> = (0..MAX_OPS)
+            .map(|i| {
+                if i.is_multiple_of(2) {
+                    Op::DropIndex { sel: 0 }
+                } else {
+                    Op::OptimizeIndices { sel: 0 }
+                }
+            })
+            .collect();
         ops.push(Op::Append {
             keys: vec![1],
             data: DataParams {
