@@ -66,25 +66,36 @@ impl CompactionKnob {
     }
 }
 
+/// splitmix64 finalizer. Knob and selector derivation must not use plain rotations of the seed:
+/// a rotation multiplies the value by a power of two modulo `2^64 - 1`, which 3 divides, so
+/// every `rotate % 3k` preserved the seed's residue mod 3 — locking knob kinds and 3-way value
+/// selectors to the write profile's rows-per-group class (`seed % 3`).
+fn mix(seed: u64) -> u64 {
+    let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
 impl CompactionProfile {
     pub(super) fn from_seed(seed: u64) -> Self {
+        // The gate stays on the raw seed: mod 4 is independent of every other per-input
+        // derivation, and keeping it spares a quarter of all inputs any knob selection.
         if seed & 3 == 0 {
             return Self::Default;
         }
 
-        let first_kind = seed.rotate_right(8) % CompactionKnob::COUNT;
-        // `COUNT - 1` is a power of two, so this modulo keeps only the low bits of the rotation.
-        // Rotate by 32 to read bits no other per-input derivation uses; bits 24-25 pick the file
-        // version, which would otherwise lock the second knob to it.
-        let mut second_kind = seed.rotate_right(32) % (CompactionKnob::COUNT - 1);
+        let mixed = mix(seed);
+        let first_kind = mixed % CompactionKnob::COUNT;
+        let mut second_kind = (mixed >> 32) % (CompactionKnob::COUNT - 1);
         if second_kind >= first_kind {
             second_kind += 1;
         }
         debug_assert_ne!(first_kind, second_kind);
 
         Self::Knobs([
-            CompactionKnob::from_kind(first_kind, seed.rotate_right(40)),
-            CompactionKnob::from_kind(second_kind, seed.rotate_right(56)),
+            CompactionKnob::from_kind(first_kind, mixed >> 8),
+            CompactionKnob::from_kind(second_kind, mixed >> 40),
         ])
     }
 
@@ -142,6 +153,61 @@ mod tests {
                     CompactionKnob::COUNT as usize,
                     "file version {version} slot {slot} reaches only {} knobs",
                     kinds.len()
+                );
+            }
+        }
+    }
+
+    /// The compaction gate and knob selectors share seed bits with the write profile, so joint
+    /// coverage is asserted rather than argued from bit ranges: every write profile must reach
+    /// default compaction and every knob kind in both slots.
+    #[test]
+    fn knob_selection_is_jointly_reachable_with_the_write_profile() {
+        use std::collections::{BTreeMap, BTreeSet, HashSet};
+        use std::mem::{discriminant, Discriminant};
+
+        use crate::dataset_ops::data::WriteProfile;
+
+        type Key = (usize, usize, bool);
+        let mut defaults: BTreeSet<Key> = BTreeSet::new();
+        let mut kinds: BTreeMap<Key, [HashSet<Discriminant<CompactionKnob>>; 2]> = BTreeMap::new();
+
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(1);
+        for _ in 0..200_000 {
+            let seed = rng.next_u64();
+            let profile = WriteProfile::from_seed(seed);
+            let key = (
+                profile.max_rows_per_group,
+                profile.max_rows_per_file,
+                profile.enable_stable_row_ids,
+            );
+            match CompactionProfile::from_seed(seed) {
+                CompactionProfile::Default => {
+                    defaults.insert(key);
+                }
+                CompactionProfile::Knobs(knobs) => {
+                    let slots = kinds.entry(key).or_default();
+                    for (slot, knob) in slots.iter_mut().zip(knobs) {
+                        slot.insert(discriminant(&knob));
+                    }
+                }
+            }
+        }
+
+        // 3 rows-per-group × 3 rows-per-file × 2 stable-row-id settings.
+        assert_eq!(
+            defaults.len(),
+            18,
+            "a write profile never compacts by default"
+        );
+        assert_eq!(kinds.len(), 18, "a write profile never selects knobs");
+        for (key, slots) in &kinds {
+            for (slot, seen) in slots.iter().enumerate() {
+                assert_eq!(
+                    seen.len(),
+                    CompactionKnob::COUNT as usize,
+                    "write profile {key:?} slot {slot} reaches only {} knob kinds",
+                    seen.len()
                 );
             }
         }
