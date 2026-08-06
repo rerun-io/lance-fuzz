@@ -43,7 +43,9 @@ PANIC_LOCATION = re.compile(r"panicked at (\S+?):\d+:\d+:\s*")
 BRACE_GROUP = re.compile(r"\{[^{}]*\}")
 BRACKET_GROUP = re.compile(r"\[[^\[\]]*\]")
 LANCE_FILE = re.compile(r"[\w/.-]*/[0-9a-f]{16,}\w*\.lance")
-CHECKOUT_PATH = re.compile(r"/[\w./-]*/(?:lance-[0-9a-f]+|index\.crates\.io-[0-9a-f]+)/")
+# The trailing group is the git checkout's revision directory: it changes with every Lance tag, so
+# leaving it in would report every path-carrying class as changed on each version bump.
+CHECKOUT_PATH = re.compile(r"/[\w./-]*/(?:lance-[0-9a-f]+|index\.crates\.io-[0-9a-f]+)/(?:[0-9a-f]{7,}/)?")
 NEGATIVE = re.compile(r"-(\d)")
 CONTEXT = re.compile(r"(^|failed: )(?:step \d+|end)(?:, candidate \d+)?: ")
 PARENTHESISED_NUM = re.compile(r"\(\d+\)")
