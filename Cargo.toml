@@ -28,19 +28,19 @@ rand_xoshiro = "0.7"
 tempfile = "3"
 tokio = { version = "1.23", features = ["rt", "io-util", "macros"] }
 
-# Upstream lance at the v11.0.0-beta.2 tag (github.com/lance-format/lance, formerly lancedb/lance).
+# Upstream lance at the v11.0.0-beta.4 tag (github.com/lance-format/lance, formerly lancedb/lance).
 # Depending on `lance` pulls its in-repo siblings (lance-table, lance-arrow, lance-datafusion, …)
 # from the same git source automatically; the extra entries below are the ones the fuzz target
 # names directly.
-lance = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.2", default-features = false }
-lance-encoding = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.2", default-features = false }
-lance-file = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.2", default-features = false }
-lance-index = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.2", default-features = false }
-lance-linalg = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.2", default-features = false }
+lance = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.4", default-features = false }
+lance-encoding = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.4", default-features = false }
+lance-file = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.4", default-features = false }
+lance-index = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.4", default-features = false }
+lance-linalg = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.4", default-features = false }
 
 # Synthetic Arrow data generator used by dataset_ops to produce values for every supported
 # column type. Same git source / tag as the rest.
-lance-datagen = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.2" }
+lance-datagen = { git = "https://github.com/lance-format/lance", tag = "v11.0.0-beta.4" }
 
 # The harness logic lives in this library so both the libFuzzer target (nightly + cargo-fuzz)
 # and the stable `replay` binary can drive it.
