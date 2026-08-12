@@ -128,6 +128,17 @@ pixi run fuzz 300   # run for 300 seconds
 
 Fuzz output is written to `logs/`.
 
+### Automated campaign
+
+The fuzz Claude skill runs a full campaign: it updates every `lance-*` dependency to the latest
+upstream tag, confirms that the tracked crash suite still reproduces, fuzzes `dataset_ops` for a
+specified duration while periodically triaging crashes, and minimizes each finding into a standalone
+reproducer in `bugs/`:
+
+```
+/fuzz until tomorrow 8am
+```
+
 ### Reproducing a finding
 
 A finding is a saved artifact. Replay it on stable, without nightly or cargo-fuzz:
