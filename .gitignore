@@ -5,6 +5,7 @@ uv.lock
 __pycache__
 
 artifacts/
+bugs/
 corpus/
 coverage/
 logs/
