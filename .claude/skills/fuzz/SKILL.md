@@ -32,7 +32,7 @@ pgrep -af "cargo|dataset_ops|fuzz-coverage" | grep -v grep
 ```
 
 If you find an unrelated build or fuzz run already going, **do not kill it and do not assume it's
-stale**. Ask the user how to proceed (leave both running / kill it / scale this run's `-fork` count
+stale**. Ask the user how to proceed (leave both running / kill it / scale this run's `-workers` count
 down to share cores) before continuing. Heavy concurrent load also means later steps (agent builds
 especially) may take much longer than normal and should not be treated as hung — see step 6.
 
@@ -107,10 +107,11 @@ Use `nohup ... &; disown`, not the Bash tool's `run_in_background`, for the fuzz
 it needs to survive independently of this session's process tree for a run that can span many
 hours. Verify it actually started (`pgrep -af dataset_ops`, check the log) before moving on.
 
-Note the `pixi run fuzz` task does its own redirect: the real fuzzer output goes to
-`logs/dataset_ops-<timestamp>.log`, and `campaign-fuzz.out` captures little more than the one-line
-"logging to <path>" message. Read that path out of `campaign-fuzz.out` once, and monitor **that**
-file for fork-mode stats and crash counts — tailing `campaign-fuzz.out` tells you nothing.
+Note the `pixi run fuzz` task does its own redirect: the real fuzzer output goes to the directory
+`logs/dataset_ops-<timestamp>/` (one `fuzz-<n>.log` per worker, plus `run.log`), and
+`campaign-fuzz.out` captures little more than the one-line "logging to <path>" message. Read that
+path out of `campaign-fuzz.out` once, and monitor the worker logs there for stats and crash counts
+— tailing `campaign-fuzz.out` tells you nothing.
 
 **Tell the user now, once, clearly:** the fuzz process itself will keep running even if this
 session closes, but the periodic classification (step 6) and the automatic wrap-up (step 7) are

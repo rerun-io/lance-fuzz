@@ -126,7 +126,11 @@ pixi run fuzz       # run until stopped
 pixi run fuzz 300   # run for 300 seconds
 ```
 
-Fuzz output is written to `logs/`.
+Fuzz output is written to `logs/dataset_ops-<timestamp>/`, one `fuzz-<n>.log` per worker.
+Workers share `corpus/dataset_ops/`; crashes land in `artifacts/dataset_ops/`.
+
+On aarch64 Linux (e.g. AWS Graviton), install `lld` first (`apt install lld`).
+The instrumented binary is too large for GNU ld's aarch64 branch range, so pixi links it with `hack/cc-lld`.
 
 ### Automated campaign
 

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Linker for aarch64 Linux: the instrumented dataset_ops binary outgrows the +-128 MiB reach of
+# R_AARCH64_CALL26 branches, which GNU ld cannot bridge; lld inserts range-extension thunks.
+exec cc -fuse-ld=lld "$@"

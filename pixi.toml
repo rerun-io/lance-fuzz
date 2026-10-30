@@ -9,6 +9,10 @@ gitpython = ">=3.1.40"
 mypy = "1.14.1.*"
 ruff = "0.11.6.*"
 
+# Needs `lld` on PATH (e.g. `apt install lld`); see hack/cc-lld.
+[target.linux-aarch64.activation.env]
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER = "$PIXI_PROJECT_ROOT/hack/cc-lld"
+
 [tasks.py-fmt]
 cmd = "ruff check --fix --config pyproject.toml . && ruff format --config pyproject.toml ."
 
@@ -55,21 +59,33 @@ args = [
 ]
 
 [tasks.fuzz]
-description = "Run dataset_ops across all CPU cores"
+description = "Run dataset_ops with one independent worker per CPU core, sharing the corpus"
+# Workers replace -fork: in fork mode the parent merges every job's results on one core, which
+# starves the other cores on slow dataset_ops sessions. A crash ends only that worker's job and a
+# new one takes its place (-jobs is effectively unlimited), so `secs` bounds the whole run instead
+# of -max_total_time, which libFuzzer applies per job.
 cmd = """
 bash -c '
-  mkdir -p logs
+  set -m
   cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)
-  log=logs/dataset_ops-$(date +%s).log
+  dir=logs/dataset_ops-$(date +%s)
+  mkdir -p "$dir"
+  echo "logging to $dir"
+  cd "$dir"
 
-  echo "logging to $log"
-  cargo +nightly fuzz run --fuzz-dir . dataset_ops -- \
+  cargo +nightly fuzz run --fuzz-dir ../.. dataset_ops -- \
     -len_control=0 \
     -max_len=4096 \
-    -fork="$cores" \
-    -ignore_crashes=1 \
-    -max_total_time={{ secs }} \
-    > "$log" 2>&1
+    -workers="$cores" \
+    -jobs=1000000 \
+    > run.log 2>&1 &
+  pid=$!
+  trap "kill -INT -- -$pid" INT TERM
+  if [ {{ secs }} -gt 0 ]; then
+    sleep {{ secs }}
+    kill -INT -- -$pid
+  fi
+  wait $pid
 '
 """
 args = [{ arg = "secs", default = "0" }]
