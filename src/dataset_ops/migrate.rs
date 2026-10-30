@@ -7,7 +7,7 @@ use arrow::datatypes::{DataType, Field};
 use lance::Dataset;
 use lance::dataset::WriteMode;
 use lance_encoding::constants::{STRUCTURAL_ENCODING_META_KEY, STRUCTURAL_ENCODING_SPARSE};
-use lance_file::version::{ConcreteFileVersion, LanceFileVersion};
+use lance_file::version::LanceFileVersion;
 
 use super::data::{WriteProfile, source_reader};
 
@@ -101,8 +101,8 @@ pub(super) fn dataset_file_version(dataset: &Dataset) -> LanceFileVersion {
     dataset
         .manifest()
         .data_storage_format
-        .lance_file_version()
-        .expect("manifest has a valid Lance file version")
+        .lance_file_format()
+        .to_selector()
 }
 
 pub(super) type SchemaSignature = Vec<(String, DataType, bool, HashMap<String, String>)>;
@@ -126,7 +126,7 @@ pub(super) fn schema_signature(dataset: &Dataset) -> SchemaSignature {
 }
 
 pub(super) fn assert_data_file_versions(dataset: &Dataset, target: LanceFileVersion, ctx: &str) {
-    let expected = ConcreteFileVersion::from(target);
+    let expected = target.resolve();
     let mut files = 0;
     for fragment in dataset.iter_fragments() {
         for file in &fragment.files {
